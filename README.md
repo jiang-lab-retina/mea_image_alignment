@@ -33,9 +33,83 @@ This project follows strict architectural principles documented in the [Constitu
 4. **Validation & Quality Control**: Automated quality assessment
 5. **Modular Architecture**: Separation of processing logic from GUI
 
+## Features
+
+### NSEW Image Stitcher (v0.1.0)
+The first feature of Image MEA Dulce is a specialized tool for stitching microscopy images based on spatial quadrants:
+
+- **Quadrant Visualization**: Load and view up to 4 images arranged by N/S/E/W keywords
+- **Automatic Keyword Detection**: Intelligently identifies image positions from filenames
+- **Multi-Format Support**: Compatible with `.czi`, `.lsm`, `.tif`, and `.tiff` files
+- **Advanced Stitching**: High-quality image alignment and blending with configurable parameters
+- **Quality Metrics**: Real-time feedback on stitching quality and alignment confidence
+- **Large Image Handling**: Automatic downsampling for memory-efficient display of large results
+
 ## Getting Started
 
-*Installation and usage instructions will be added as the project develops.*
+### Prerequisites
+- Python 3.10 or higher
+- 4GB RAM minimum (8GB recommended for large images)
+- Display with at least 1920x1080 resolution
+
+### Installation
+
+1. **Clone the repository**:
+```bash
+git clone https://github.com/jiang-lab-retina/mea_image_alignment.git
+cd mea_image_alignment
+```
+
+2. **Create a virtual environment** (recommended):
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. **Install dependencies**:
+```bash
+pip install -r requirements.txt
+```
+
+4. **Install the package**:
+```bash
+pip install -e .
+```
+
+### Quick Start
+
+1. **Launch the application**:
+```bash
+python main.py
+```
+
+2. **Load images**:
+   - Click "Load Images" button
+   - Select 1-4 microscopy images with NSEW keywords in filenames
+   - Example: `experiment_NE.czi`, `experiment_SW.czi`
+
+3. **View quadrants**:
+   - Images are automatically arranged by spatial position
+   - Use zoom and pan controls to inspect details
+   - Verify alignment before stitching
+
+4. **Stitch images**:
+   - Click "Stitch Images" button
+   - Adjust parameters (optional): blend mode, overlap threshold, alignment method
+   - Monitor progress in real-time
+   - View quality metrics in result window
+
+5. **Save results**:
+   - Use "Save As" button in result window
+   - Choose format: TIFF (lossless), PNG, or JPEG
+   - Full resolution saved to disk, optimized view displayed
+
+### Example Filenames
+The application detects spatial position from keywords:
+- `2025.10.22-09.58.50-4141-opnT2_NE.czi` → North-East quadrant
+- `sample_northwest_image.lsm` → North-West quadrant
+- `data_SE_final.tif` → South-East quadrant
+- `experiment-SW.tiff` → South-West quadrant
 
 ## Development
 

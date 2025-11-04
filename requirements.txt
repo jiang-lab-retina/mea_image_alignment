@@ -1,0 +1,19 @@
+# NSEW Image Stitcher - Python Dependencies
+# Multi-Electrode Array (MEA) microscopy image stitching application
+
+# GUI Framework
+PyQt6>=6.6.0
+
+# Image Processing
+numpy>=1.24.0
+opencv-python>=4.8.0
+
+# Microscopy File Formats
+czifile>=2019.7.2
+tifffile>=2023.7.10
+Pillow>=10.0.0
+
+# Testing
+pytest>=7.4.0
+pytest-qt>=4.2.0
+
