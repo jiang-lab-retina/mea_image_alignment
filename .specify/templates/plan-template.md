@@ -31,7 +31,21 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Verify alignment with Image MEA Dulce Constitution v1.0.0:
+
+- [ ] **Data Integrity**: Does the design preserve original raw data? Are all transformations documented?
+- [ ] **GUI Design**: Are parameters accessible through intuitive UI controls? Is real-time preview feasible?
+- [ ] **Reproducibility**: Can processing be fully reproduced from saved parameters? Is configuration serializable?
+- [ ] **Validation**: Does the feature include quality metrics and validation? Can users inspect results?
+- [ ] **Modularity**: Is processing logic separated from GUI? Can it be called programmatically?
+- [ ] **Performance**: Does the feature handle large files efficiently? Is progress feedback provided?
+- [ ] **Testing**: Are unit tests planned? Is validation with real data included?
+- [ ] **Documentation**: Are parameters documented with scientific meaning and recommended ranges?
+
+**Complexity Justification Required If**:
+- Original data modification is unavoidable
+- Processing is non-reproducible by nature
+- GUI and processing logic must be tightly coupled
 
 ## Project Structure
 

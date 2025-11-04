@@ -95,6 +95,16 @@
 - **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
 - **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
 
+### Constitution-Aligned Requirements
+
+*Ensure feature requirements align with Image MEA Dulce Constitution:*
+
+- **Data Integrity**: [How does this feature preserve/protect raw data?]
+- **GUI Usability**: [What parameters need UI controls? What validation is needed?]
+- **Reproducibility**: [What must be saved to reproduce results? What are the key parameters?]
+- **Validation**: [How will quality/correctness be assessed? What metrics are relevant?]
+- **Modularity**: [Can core logic work independently of GUI? Is CLI access needed?]
+
 ### Key Entities *(include if feature involves data)*
 
 - **[Entity 1]**: [What it represents, key attributes without implementation]
