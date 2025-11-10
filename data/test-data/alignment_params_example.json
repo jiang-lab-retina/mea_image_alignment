@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "timestamp": "2025-11-05T16:30:00.000000",
+  "stitched_image_path": "stitched_result_2025-11-05_16-30-00.tiff",
+  "quadrants": [
+    {
+      "quadrant": "NW",
+      "original_image_path": "/path/to/experiment_NW.czi",
+      "dimensions": [2048, 2048],
+      "position_shift": [0.0, 0.0]
+    },
+    {
+      "quadrant": "NE",
+      "original_image_path": "/path/to/experiment_NE.czi",
+      "dimensions": [2048, 2048],
+      "position_shift": [1024.0, 0.0]
+    },
+    {
+      "quadrant": "SW",
+      "original_image_path": "/path/to/experiment_SW.czi",
+      "dimensions": [2048, 2048],
+      "position_shift": [0.0, 1024.0]
+    },
+    {
+      "quadrant": "SE",
+      "original_image_path": "/path/to/experiment_SE.czi",
+      "dimensions": [2048, 2048],
+      "position_shift": [1024.0, 1024.0]
+    }
+  ]
+}
+

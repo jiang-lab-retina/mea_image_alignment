@@ -6,11 +6,15 @@ Results and quality metrics from stitching operations
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Tuple, TYPE_CHECKING
 import numpy as np
 
 from .stitching_config import StitchingConfig
 from .quadrant_image import QuadrantImage
+from . import Quadrant
+
+if TYPE_CHECKING:
+    from .alignment_parameters import AlignmentParameters
 
 
 @dataclass
@@ -109,6 +113,52 @@ class QualityMetrics:
 
 
 @dataclass
+class DimensionTransformation:
+    """
+    Record of dimension transformation applied during chip stitching.
+    
+    Tracks which chip images were resized and the transformation details
+    for reproducibility and validation.
+    
+    Attributes:
+        quadrant: Which chip quadrant was transformed
+        original_dimensions: (width, height) before resize
+        final_dimensions: (width, height) after resize
+        was_resized: True if image was resized, False if dimensions matched
+    """
+    quadrant: Quadrant
+    original_dimensions: Tuple[int, int]
+    final_dimensions: Tuple[int, int]
+    was_resized: bool = False
+
+
+@dataclass
+class ChipStitchMetadata:
+    """
+    Metadata specific to chip image stitching operations.
+    
+    Provides detailed information about chip image discovery, placeholder usage,
+    and dimension transformations for quality assurance and reproducibility.
+    
+    Attributes:
+        chip_images_found: Number of chip images successfully discovered
+        placeholders_generated: Number of black placeholders used for missing chips
+        placeholder_quadrants: List of quadrants where placeholders were used
+        dimension_transformations: List of chip images that were resized
+        processing_time_seconds: Time taken for chip stitching operation
+        source_alignment_file: Path to alignment parameters JSON file used
+        source_alignment_timestamp: When the alignment parameters were created
+    """
+    chip_images_found: int
+    placeholders_generated: int
+    placeholder_quadrants: List[Quadrant]
+    dimension_transformations: List[DimensionTransformation]
+    processing_time_seconds: float
+    source_alignment_file: Path
+    source_alignment_timestamp: str
+
+
+@dataclass
 class StitchedResult:
     """
     Complete result of a stitching operation.
@@ -154,6 +204,11 @@ class StitchedResult:
     timestamp: datetime = field(default_factory=datetime.now)
     software_version: str = "0.1.0"
     was_downsampled: bool = False
+    
+    # Chip stitching extensions (002-chip-image-stitch)
+    alignment_parameters: Optional['AlignmentParameters'] = None
+    is_chip_stitch: bool = False
+    chip_metadata: Optional[ChipStitchMetadata] = None
     
     def memory_size_mb(self) -> float:
         """

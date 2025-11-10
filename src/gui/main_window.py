@@ -17,8 +17,10 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon
 
 from src.models import Quadrant, QuadrantImage, ImageMetadata, StitchingConfig, StitchedResult
-from src.lib import keyword_detector, io, stitching, config_manager
-from src.lib import CorruptedFileError, UnsupportedFormatError, FileNotFoundError, StitchingError
+from src.models.alignment_parameters import AlignmentParameters
+from src.lib import keyword_detector, io, stitching, config_manager, alignment_manager, chip_image_finder, chip_stitcher
+from src.lib import CorruptedFileError, UnsupportedFormatError, FileNotFoundError, StitchingError, ChipImageNotFoundError
+from src.models.chip_image_set import ChipImageSet
 from src.gui.quadrant_viewer import QuadrantViewer
 from src.gui.assignment_dialog import AssignmentDialog
 from src.gui.stitch_dialog import StitchDialog
@@ -57,6 +59,38 @@ class StitchingThread(QThread):
         self.progress_updated.emit(percent, message)
 
 
+class ChipStitchingThread(QThread):
+    """Background thread for chip stitching operations (T050)."""
+    
+    progress_updated = pyqtSignal(int, str)
+    finished = pyqtSignal(object)  # StitchedResult
+    error = pyqtSignal(str)
+    
+    def __init__(self, chip_image_set: ChipImageSet, alignment_params: AlignmentParameters, config: StitchingConfig):
+        super().__init__()
+        self.chip_image_set = chip_image_set
+        self.alignment_params = alignment_params
+        self.config = config
+    
+    def run(self):
+        """Execute chip stitching in background."""
+        try:
+            result = chip_stitcher.stitch_chip_images(
+                self.chip_image_set,
+                self.alignment_params,
+                self.config,
+                progress_callback=self._progress_callback
+            )
+            self.finished.emit(result)
+        except Exception as e:
+            logger.exception("Chip stitching failed")
+            self.error.emit(str(e))
+    
+    def _progress_callback(self, percent: int, message: str):
+        """Forward progress updates to main thread."""
+        self.progress_updated.emit(percent, message)
+
+
 class MainWindow(QMainWindow):
     """
     Main application window for NSEW Image Stitcher.
@@ -86,8 +120,16 @@ class MainWindow(QMainWindow):
         self.stitching_thread: Optional[StitchingThread] = None
         self.progress_dialog: Optional[QProgressDialog] = None
         
+        # Chip stitching state (T021)
+        self.alignment_parameters: Optional[AlignmentParameters] = None
+        self.chip_stitching_thread: Optional[ChipStitchingThread] = None
+        self.chip_progress_dialog: Optional[QProgressDialog] = None
+        
         self._setup_ui()
         self._connect_signals()
+        
+        # Load saved alignment parameters if available (T025)
+        self.load_saved_alignment_params()
         
         logger.info("MainWindow initialized")
     
@@ -159,6 +201,13 @@ class MainWindow(QMainWindow):
         self.stitch_action.setEnabled(False)
         self.stitch_action.triggered.connect(self.on_stitch_clicked)
         toolbar.addAction(self.stitch_action)
+        
+        # Stitch Chip Images action (initially disabled) (T020)
+        self.stitch_chip_action = QAction("🔬 Stitch Chip Images", self)
+        self.stitch_chip_action.setStatusTip("Apply alignment to stitch chip images (requires previous stitching)")
+        self.stitch_chip_action.setEnabled(False)
+        self.stitch_chip_action.triggered.connect(self.on_stitch_chip_clicked)
+        toolbar.addAction(self.stitch_chip_action)
         
         toolbar.addSeparator()
         
@@ -610,70 +659,520 @@ class MainWindow(QMainWindow):
     
     def _handle_stitching_progress(self, percent: int, message: str):
         """Handle progress updates from stitching thread."""
-        if self.progress_dialog:
-            self.progress_dialog.setValue(percent)
-            self.progress_dialog.setLabelText(message)
+        try:
+            if self.progress_dialog:
+                self.progress_dialog.setValue(percent)
+                self.progress_dialog.setLabelText(message)
+        except Exception as e:
+            logger.error(f"Error updating progress: {e}")
     
     def _handle_stitching_complete(self, result: StitchedResult):
         """Handle successful stitching completion."""
-        if self.progress_dialog:
-            self.progress_dialog.close()
-            self.progress_dialog = None
+        try:
+            # Close progress dialog first
+            if self.progress_dialog:
+                self.progress_dialog.close()
+                self.progress_dialog = None
+            
+            # Store result
+            self.last_result = result
+            self.save_config_action.setEnabled(True)
+            
+            # Store alignment parameters and enable chip stitching (T023-T024)
+            if result.alignment_parameters:
+                self.alignment_parameters = result.alignment_parameters
+                self._save_alignment_params_to_disk()
+                self.stitch_chip_action.setEnabled(True)
+                logger.info("Alignment parameters captured and saved - chip stitching enabled")
+            else:
+                logger.warning("No alignment parameters in result - chip stitching disabled")
+            
+            logger.info(f"Stitching complete: {result.full_width}×{result.full_height}px")
+            
+            # Update status bar (simpler message to avoid potential errors)
+            self.status_bar.showMessage(f"Stitching complete! {result.full_width}×{result.full_height}px")
+            
+            # Show result window
+            try:
+                result_window = ResultWindow(result, parent=self)
+                result_window.show()
+            except Exception as e:
+                logger.exception("Error creating result window")
+                QMessageBox.warning(
+                    self,
+                    "Display Error",
+                    f"Stitching succeeded but could not display result:\n{str(e)}\n\n"
+                    f"Result saved to: {result.timestamp}",
+                    QMessageBox.StandardButton.Ok
+                )
+                return
+            
+            # Show success message with careful formatting
+            try:
+                quality_info = ""
+                if result.quality_metrics:
+                    try:
+                        quality_cat = result.quality_metrics.quality_category()
+                        confidence = result.quality_metrics.overall_confidence
+                        quality_info = f"Quality: {quality_cat} ({confidence:.2f})\n"
+                    except:
+                        quality_info = ""
+                
+                num_quadrants = len(result.source_quadrants)
+                
+                QMessageBox.information(
+                    self,
+                    "Stitching Complete",
+                    f"Successfully stitched {num_quadrants} quadrant(s).\n\n"
+                    f"Resolution: {result.full_width} × {result.full_height} pixels\n"
+                    f"{quality_info}"
+                    f"Processing time: {result.processing_time_seconds:.2f} seconds",
+                    QMessageBox.StandardButton.Ok
+                )
+            except Exception as e:
+                logger.exception("Error showing success message")
+                # Still show a simple success message
+                QMessageBox.information(
+                    self,
+                    "Stitching Complete",
+                    "Image stitching completed successfully!",
+                    QMessageBox.StandardButton.Ok
+                )
         
-        self.last_result = result
-        self.save_config_action.setEnabled(True)
-        
-        logger.info(f"Stitching complete: {result.full_width}×{result.full_height}px")
-        
-        # Show result window
-        result_window = ResultWindow(result, parent=self)
-        result_window.show()
-        
-        self.status_bar.showMessage(
-            f"Stitching complete! Quality: {result.quality_metrics.quality_category()}"
-        )
-        
-        # Show success message
-        QMessageBox.information(
-            self,
-            "✅ Stitching Complete!",
-            f"Successfully stitched {result.num_quadrants_used()} quadrant(s).\n\n"
-            f"Resolution: {result.full_width} × {result.full_height} pixels\n"
-            f"Quality: {result.quality_metrics.quality_category()} "
-            f"({result.quality_metrics.overall_confidence:.2f})\n"
-            f"Processing time: {result.processing_time_seconds:.2f} seconds",
-            QMessageBox.StandardButton.Ok
-        )
+        except Exception as e:
+            logger.exception("Critical error in stitching completion handler")
+            # Ensure progress dialog is closed
+            if self.progress_dialog:
+                try:
+                    self.progress_dialog.close()
+                    self.progress_dialog = None
+                except:
+                    pass
+            
+            # Show error message
+            QMessageBox.critical(
+                self,
+                "Unexpected Error",
+                f"An unexpected error occurred after stitching:\n\n{str(e)}\n\n"
+                "The stitching may have completed, but the result could not be displayed.",
+                QMessageBox.StandardButton.Ok
+            )
+            self.status_bar.showMessage("Error displaying stitching result")
     
     def _handle_stitching_error(self, error_message: str):
         """Handle stitching errors."""
-        if self.progress_dialog:
-            self.progress_dialog.close()
-            self.progress_dialog = None
+        try:
+            if self.progress_dialog:
+                self.progress_dialog.close()
+                self.progress_dialog = None
+            
+            logger.error(f"Stitching failed: {error_message}")
+            
+            self.status_bar.showMessage("Stitching failed")
+            
+            # Show error with actionable guidance
+            QMessageBox.critical(
+                self,
+                "Stitching Failed",
+                f"Could not stitch images:\n\n{error_message}\n\n"
+                "Suggestions:\n"
+                "• Ensure images have sufficient overlap (10-20%)\n"
+                "• Try different alignment method (ORB, SIFT, AKAZE)\n"
+                "• Check that images are from the same sample\n"
+                "• Verify images are not corrupted",
+                QMessageBox.StandardButton.Ok
+            )
+        except Exception as e:
+            logger.exception("Critical error in stitching error handler")
+            # Fallback error message
+            try:
+                QMessageBox.critical(
+                    self,
+                    "Error",
+                    f"Stitching failed: {error_message}",
+                    QMessageBox.StandardButton.Ok
+                )
+            except:
+                pass
+    
+    def _save_alignment_params_to_disk(self):
+        """
+        Save alignment parameters to disk (T024).
         
-        logger.error(f"Stitching failed: {error_message}")
+        Saves to ./.image_mea_alignment_params.json alongside the stitched image.
+        Uses atomic write to prevent corruption.
+        """
+        if not self.alignment_parameters:
+            return
         
-        self.status_bar.showMessage("Stitching failed")
+        try:
+            # Save to current directory
+            save_path = Path.cwd() / ".image_mea_alignment_params.json"
+            alignment_manager.save_alignment_params(self.alignment_parameters, save_path)
+            logger.info(f"Saved alignment parameters to: {save_path}")
+        except Exception as e:
+            logger.exception("Failed to save alignment parameters")
+            QMessageBox.warning(
+                self,
+                "Save Warning",
+                f"Could not save alignment parameters:\n{str(e)}\n\n"
+                "Chip stitching will work for this session but parameters won't persist.",
+                QMessageBox.StandardButton.Ok
+            )
+    
+    def load_saved_alignment_params(self):
+        """
+        Load previously saved alignment parameters (T025-T026).
         
-        # Show error with actionable guidance
-        QMessageBox.critical(
-            self,
-            "❌ Stitching Failed",
-            f"Could not stitch images:\n\n{error_message}\n\n"
-            "Suggestions:\n"
-            "• Ensure images have sufficient overlap (10-20%)\n"
-            "• Try different alignment method (ORB, SIFT, AKAZE)\n"
-            "• Check that images are from the same sample\n"
-            "• Verify images are not corrupted",
-            QMessageBox.StandardButton.Ok
-        )
+        Checks for ./.image_mea_alignment_params.json and validates:
+        - File format and completeness
+        - Parameter version compatibility
+        - Referenced image files existence
+        
+        Shows warnings for corrupted/incomplete files.
+        Enables chip stitching button if valid parameters found.
+        """
+        try:
+            param_path = Path.cwd() / ".image_mea_alignment_params.json"
+            
+            if not param_path.exists():
+                logger.debug("No saved alignment parameters found")
+                return
+            
+            # Load parameters
+            params = alignment_manager.load_alignment_params(param_path)
+            
+            # Validate parameters (T026)
+            validation = alignment_manager.validate_alignment_params(
+                params, 
+                check_file_existence=True
+            )
+            
+            if not validation.is_valid:
+                # Show warning about corrupted/incomplete file
+                error_details = "\n".join(f"  • {err}" for err in validation.errors)
+                warning_details = "\n".join(f"  • {warn}" for warn in validation.warnings) if validation.warnings else ""
+                
+                message = f"Found alignment parameter file, but it has issues:\n\n{error_details}"
+                if warning_details:
+                    message += f"\n\nWarnings:\n{warning_details}"
+                message += "\n\nChip stitching will be disabled until you perform a new stitch."
+                
+                QMessageBox.warning(
+                    self,
+                    "Invalid Alignment Parameters",
+                    message,
+                    QMessageBox.StandardButton.Ok
+                )
+                logger.warning(f"Invalid alignment parameters: {', '.join(validation.errors)}")
+                return
+            
+            # Parameters are valid - enable chip stitching
+            self.alignment_parameters = params
+            self.stitch_chip_action.setEnabled(True)
+            
+            # Show info message about warnings if any
+            if validation.warnings:
+                warning_details = "\n".join(f"  • {warn}" for warn in validation.warnings)
+                QMessageBox.information(
+                    self,
+                    "Alignment Parameters Loaded",
+                    f"Loaded previous alignment parameters with warnings:\n\n{warning_details}\n\n"
+                    "Chip stitching is enabled, but results may vary if referenced images have changed.",
+                    QMessageBox.StandardButton.Ok
+                )
+                logger.info(f"Loaded alignment parameters with warnings: {', '.join(validation.warnings)}")
+            else:
+                logger.info(f"Successfully loaded alignment parameters from: {param_path}")
+                self.status_bar.showMessage("Loaded previous alignment - chip stitching enabled")
+        
+        except Exception as e:
+            logger.exception("Error loading alignment parameters")
+            QMessageBox.warning(
+                self,
+                "Load Error",
+                f"Could not load alignment parameters:\n{str(e)}\n\n"
+                "Chip stitching will be disabled.",
+                QMessageBox.StandardButton.Ok
+            )
+    
+    def on_stitch_chip_clicked(self):
+        """
+        Handle chip stitching button click (T033-T035).
+        
+        Workflow:
+        1. Discover chip images using alignment parameters (T033)
+        2. Display error if no chip images found (T034)
+        3. Show discovery results summary before proceeding (T035)
+        4. Proceed to chip stitching (Phase 5 implementation)
+        """
+        logger.info("Chip stitching button clicked")
+        
+        if not self.alignment_parameters:
+            QMessageBox.warning(
+                self,
+                "No Alignment Parameters",
+                "Cannot stitch chip images: no alignment parameters available.\n\n"
+                "Please perform original stitching first.",
+                QMessageBox.StandardButton.Ok
+            )
+            return
+        
+        try:
+            # T033: Discover chip images
+            logger.info("Discovering chip images...")
+            chip_set = chip_image_finder.find_chip_images(self.alignment_parameters)
+            
+            # T035: Show discovery results summary
+            found_count = len(chip_set.chip_images)
+            missing_count = len(chip_set.missing_quadrants)
+            mismatch_count = len(chip_set.dimension_mismatches)
+            total_count = found_count + missing_count
+            
+            # Build detailed summary message
+            summary_lines = [
+                f"Chip Image Discovery Results:",
+                f"",
+            ]
+            
+            # Show status based on what was found
+            if found_count == 0:
+                summary_lines.append(f"⚠️ Found: {found_count} of {total_count} chip images (ALL MISSING)")
+                summary_lines.append(f"All quadrants will use black placeholders.")
+            elif found_count == total_count:
+                summary_lines.append(f"✓ Found: {found_count} of {total_count} chip images (ALL FOUND)")
+            else:
+                summary_lines.append(f"✓ Found: {found_count} of {total_count} chip images")
+            
+            # List found chips
+            if chip_set.chip_images:
+                summary_lines.append("")
+                summary_lines.append("Found chips:")
+                for quadrant, path in chip_set.chip_images.items():
+                    summary_lines.append(f"  • {quadrant.value}: {path.name}")
+            
+            # List missing chips (will use placeholders)
+            if chip_set.missing_quadrants:
+                summary_lines.append("")
+                summary_lines.append(f"⚠️ Missing: {missing_count} chip images (will use black placeholders):")
+                for quadrant in chip_set.missing_quadrants:
+                    summary_lines.append(f"  • {quadrant.value}")
+            
+            # List dimension mismatches (will be resized)
+            if chip_set.dimension_mismatches:
+                summary_lines.append("")
+                summary_lines.append(f"📐 Dimension mismatches: {mismatch_count} (will be automatically resized):")
+                for mismatch in chip_set.dimension_mismatches:
+                    summary_lines.append(
+                        f"  • {mismatch.quadrant.value}: "
+                        f"{mismatch.actual_dimensions} → {mismatch.expected_dimensions}"
+                    )
+            
+            summary_lines.append("")
+            summary_lines.append("Proceed with chip stitching?")
+            
+            # Show confirmation dialog with discovery results
+            result = QMessageBox.question(
+                self,
+                "Chip Image Discovery",
+                "\n".join(summary_lines),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if result != QMessageBox.StandardButton.Yes:
+                logger.info("User cancelled chip stitching")
+                return
+            
+            # T048-T054: Proceed with chip stitching
+            # Get stitching configuration
+            dialog = StitchDialog(parent=self)
+            if dialog.exec() != StitchDialog.DialogCode.Accepted:
+                logger.info("User cancelled stitching configuration")
+                return
+            
+            config = dialog.get_config()
+            logger.info(f"Chip stitching config: alignment={config.alignment_method}, blend={config.blend_mode}")
+            
+            # T051: Create progress dialog
+            self.chip_progress_dialog = QProgressDialog(
+                "Preparing to stitch chip images...",
+                "Cancel",
+                0,
+                100,
+                self
+            )
+            self.chip_progress_dialog.setWindowTitle("Chip Stitching Progress")
+            self.chip_progress_dialog.setWindowModality(Qt.WindowModality.WindowModal)
+            self.chip_progress_dialog.setMinimumDuration(0)
+            self.chip_progress_dialog.setValue(0)
+            
+            # T050: Create and start chip stitching thread
+            self.chip_stitching_thread = ChipStitchingThread(
+                chip_set,
+                self.alignment_parameters,
+                config
+            )
+            
+            # T052: Connect progress signals
+            self.chip_stitching_thread.progress_updated.connect(self._handle_chip_stitching_progress)
+            self.chip_stitching_thread.finished.connect(self._handle_chip_stitching_complete)
+            self.chip_stitching_thread.error.connect(self._handle_chip_stitching_error)
+            
+            # Start stitching
+            self.chip_stitching_thread.start()
+            logger.info("Chip stitching thread started")
+        
+        except ChipImageNotFoundError as e:
+            # This exception is no longer raised, but keep handler for backward compatibility
+            logger.error(f"Chip image discovery error: {e}")
+            QMessageBox.critical(
+                self,
+                "Chip Discovery Error",
+                f"Error during chip image discovery:\n\n{str(e)}\n\n"
+                "Please check the log for details.",
+                QMessageBox.StandardButton.Ok
+            )
+        
+        except Exception as e:
+            logger.exception("Error during chip image discovery")
+            QMessageBox.critical(
+                self,
+                "Discovery Error",
+                f"An error occurred while discovering chip images:\n\n{str(e)}",
+                QMessageBox.StandardButton.Ok
+            )
+    
+    def _handle_chip_stitching_progress(self, percent: int, message: str):
+        """Handle chip stitching progress updates (T052)."""
+        try:
+            if self.chip_progress_dialog:
+                self.chip_progress_dialog.setValue(percent)
+                self.chip_progress_dialog.setLabelText(f"{message} ({percent}%)")
+        except Exception as e:
+            logger.exception("Error updating chip stitching progress")
+    
+    def _handle_chip_stitching_complete(self, result: StitchedResult):
+        """Handle chip stitching completion (T053-T054)."""
+        try:
+            # Close progress dialog
+            if self.chip_progress_dialog:
+                self.chip_progress_dialog.close()
+                self.chip_progress_dialog = None
+            
+            # Store result
+            self.last_result = result
+            
+            logger.info(
+                f"Chip stitching complete: {result.full_width}×{result.full_height}px, "
+                f"found={result.chip_metadata.chip_images_found}, "
+                f"placeholders={result.chip_metadata.placeholders_generated}"
+            )
+            
+            # Update status bar
+            self.status_bar.showMessage(
+                f"Chip stitching complete! {result.full_width}×{result.full_height}px"
+            )
+            
+            # T053: Show result window with chip metadata
+            try:
+                result_window = ResultWindow(result, parent=self)
+                result_window.show()
+            except Exception as e:
+                logger.exception("Error creating result window")
+                QMessageBox.warning(
+                    self,
+                    "Display Error",
+                    f"Chip stitching succeeded but could not display result:\n{str(e)}",
+                    QMessageBox.StandardButton.Ok
+                )
+                return
+            
+            # Show success message
+            try:
+                summary_lines = [
+                    f"Successfully stitched chip images!",
+                    f"",
+                    f"Resolution: {result.full_width} × {result.full_height} pixels",
+                    f"Chip images found: {result.chip_metadata.chip_images_found}",
+                    f"Placeholders generated: {result.chip_metadata.placeholders_generated}",
+                    f"Processing time: {result.processing_time_seconds:.2f} seconds",
+                ]
+                
+                if result.chip_metadata.dimension_transformations:
+                    resized_count = sum(1 for t in result.chip_metadata.dimension_transformations if t.was_resized)
+                    if resized_count > 0:
+                        summary_lines.append(f"Images resized: {resized_count}")
+                
+                QMessageBox.information(
+                    self,
+                    "Chip Stitching Complete",
+                    "\n".join(summary_lines),
+                    QMessageBox.StandardButton.Ok
+                )
+            except Exception as e:
+                logger.exception("Error showing success message")
+                QMessageBox.information(
+                    self,
+                    "Chip Stitching Complete",
+                    "Chip image stitching completed successfully!",
+                    QMessageBox.StandardButton.Ok
+                )
+        
+        except Exception as e:
+            logger.exception("Critical error in chip stitching completion handler")
+            if self.chip_progress_dialog:
+                try:
+                    self.chip_progress_dialog.close()
+                    self.chip_progress_dialog = None
+                except:
+                    pass
+    
+    def _handle_chip_stitching_error(self, error_message: str):
+        """Handle chip stitching errors (T054)."""
+        try:
+            # Close progress dialog
+            if self.chip_progress_dialog:
+                self.chip_progress_dialog.close()
+                self.chip_progress_dialog = None
+            
+            logger.error(f"Chip stitching error: {error_message}")
+            
+            # Update status bar
+            self.status_bar.showMessage("Chip stitching failed")
+            
+            # Show error dialog
+            QMessageBox.critical(
+                self,
+                "Chip Stitching Failed",
+                f"Chip stitching encountered an error:\n\n{error_message}\n\n"
+                "Please check the log for details.",
+                QMessageBox.StandardButton.Ok
+            )
+        
+        except Exception as e:
+            logger.exception("Critical error in chip stitching error handler")
+            # Fallback error message
+            try:
+                QMessageBox.critical(
+                    self,
+                    "Error",
+                    f"Chip stitching failed: {error_message}",
+                    QMessageBox.StandardButton.Ok
+                )
+            except:
+                pass
     
     def closeEvent(self, event):
         """Handle window close event."""
-        # Terminate stitching thread if running
+        # Terminate stitching threads if running
         if self.stitching_thread and self.stitching_thread.isRunning():
             self.stitching_thread.terminate()
             self.stitching_thread.wait()
+        
+        if self.chip_stitching_thread and self.chip_stitching_thread.isRunning():
+            self.chip_stitching_thread.terminate()
+            self.chip_stitching_thread.wait()
         
         logger.info("MainWindow closing")
         event.accept()

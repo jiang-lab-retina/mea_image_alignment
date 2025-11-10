@@ -104,6 +104,40 @@ python main.py
    - Choose format: TIFF (lossless), PNG, or JPEG
    - Full resolution saved to disk, optimized view displayed
 
+### Chip Image Stitching (v0.2.0)
+
+The application now supports stitching chip images using alignment parameters from original stitching, providing ~50% time savings:
+
+1. **Perform original stitching first**:
+   - Load and stitch original quadrant images (e.g., `prefix_NE.czi`, `prefix_NW.czi`)
+   - Alignment parameters are automatically saved to `.image_mea_alignment_params.json`
+
+2. **Click "Stitch Chip Images"**:
+   - Automatically discovers chip images (e.g., `prefix_chipNE.czi`, `prefix_chipNW.czi`)
+   - Shows discovery summary with found/missing chips and dimension mismatches
+
+3. **Review and confirm**:
+   - Check chip image discovery results
+   - Missing chips will use black placeholders
+   - Dimension mismatches will be automatically resized
+
+4. **Monitor progress**:
+   - Real-time progress updates during chip stitching
+   - Bypasses feature detection for faster processing
+   - Applies stored alignment from original stitching
+
+5. **View chip results**:
+   - Result window displays chip-specific metadata
+   - Shows found chips, placeholders, and dimension transformations
+   - Includes processing time and quality metrics
+
+**Key Features**:
+- **Automatic Discovery**: Finds chip images using `prefix_chipQUADRANT.ext` pattern
+- **Missing Chip Handling**: Generates pure black (RGB: 0,0,0) placeholders
+- **Dimension Normalization**: Automatically resizes mismatched chip dimensions
+- **Alignment Reuse**: Bypasses feature detection by reusing original position shifts
+- **Persistent Parameters**: Alignment saved/loaded automatically for workflow continuity
+
 ### Example Filenames
 The application detects spatial position from keywords:
 - `2025.10.22-09.58.50-4141-opnT2_NE.czi` → North-East quadrant

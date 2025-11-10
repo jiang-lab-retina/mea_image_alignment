@@ -152,6 +152,70 @@ class ResultWindow(QWidget):
         config_group.setLayout(config_layout)
         info_layout.addWidget(config_group)
         
+        # T055-T057: Chip metadata (if chip stitching result)
+        if self.result.is_chip_stitch and self.result.chip_metadata:
+            chip_group = QGroupBox("🔬 Chip Image Details")
+            chip_layout = QFormLayout()
+            chip_layout.setSpacing(6)
+            
+            # T056: Basic chip metadata
+            self.chip_found_label = QLabel()
+            chip_layout.addRow("Chip Images Found:", self.chip_found_label)
+            
+            self.chip_placeholders_label = QLabel()
+            chip_layout.addRow("Placeholders Generated:", self.chip_placeholders_label)
+            
+            # Show which quadrants had placeholders
+            if self.result.chip_metadata.placeholder_quadrants:
+                placeholder_names = ", ".join([q.value for q in self.result.chip_metadata.placeholder_quadrants])
+                placeholder_info = QLabel(f"({placeholder_names})")
+                placeholder_info.setStyleSheet("color: #666; font-size: 9px;")
+                placeholder_info.setWordWrap(True)
+                chip_layout.addRow("", placeholder_info)
+            
+            # T057: Dimension transformation display
+            if self.result.chip_metadata.dimension_transformations:
+                resized_count = sum(1 for t in self.result.chip_metadata.dimension_transformations if t.was_resized)
+                self.chip_resized_label = QLabel(f"{resized_count} image(s)")
+                chip_layout.addRow("Dimensions Resized:", self.chip_resized_label)
+                
+                # Show which quadrants were resized with details
+                if resized_count > 0:
+                    resize_details = []
+                    for transform in self.result.chip_metadata.dimension_transformations:
+                        if transform.was_resized:
+                            resize_details.append(
+                                f"{transform.quadrant.value}: "
+                                f"{transform.original_dimensions[0]}×{transform.original_dimensions[1]} → "
+                                f"{transform.final_dimensions[0]}×{transform.final_dimensions[1]}"
+                            )
+                    
+                    resize_info = QLabel("\n".join(resize_details))
+                    resize_info.setStyleSheet("color: #666; font-size: 9px;")
+                    resize_info.setWordWrap(True)
+                    chip_layout.addRow("", resize_info)
+            
+            self.chip_time_label = QLabel()
+            chip_layout.addRow("Chip Processing Time:", self.chip_time_label)
+            
+            chip_group.setLayout(chip_layout)
+            chip_group.setStyleSheet("""
+                QGroupBox {
+                    border: 2px solid #2196f3;
+                    border-radius: 4px;
+                    margin-top: 8px;
+                    padding-top: 8px;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    left: 8px;
+                    padding: 0 4px;
+                    color: #2196f3;
+                    font-weight: bold;
+                }
+            """)
+            info_layout.addWidget(chip_group)
+        
         # Warnings (if any)
         if self.result.quality_metrics.has_warnings():
             warnings_group = QGroupBox("⚠️ Warnings")
@@ -265,6 +329,29 @@ class ResultWindow(QWidget):
         self.overlap_label.setText(
             f"{self.result.stitching_config.overlap_threshold_percent:.0f}%"
         )
+        
+        # T056-T057: Populate chip metadata (if chip stitching result)
+        if self.result.is_chip_stitch and self.result.chip_metadata:
+            chip_meta = self.result.chip_metadata
+            
+            # Found vs total
+            total_quadrants = chip_meta.chip_images_found + chip_meta.placeholders_generated
+            self.chip_found_label.setText(
+                f"<span style='font-weight: bold;'>{chip_meta.chip_images_found}</span> of {total_quadrants}"
+            )
+            
+            # Placeholders
+            if chip_meta.placeholders_generated > 0:
+                self.chip_placeholders_label.setText(
+                    f"<span style='color: #ff9800; font-weight: bold;'>{chip_meta.placeholders_generated}</span>"
+                )
+            else:
+                self.chip_placeholders_label.setText(
+                    f"<span style='color: #4caf50;'>0 (all chips found!)</span>"
+                )
+            
+            # Processing time
+            self.chip_time_label.setText(f"{chip_meta.processing_time_seconds:.2f}s")
     
     def _numpy_to_qpixmap(self, image_data: np.ndarray) -> QPixmap:
         """Convert NumPy array to QPixmap."""

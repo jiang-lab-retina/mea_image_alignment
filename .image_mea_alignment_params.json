@@ -1,0 +1,55 @@
+{
+  "version": "1.0",
+  "timestamp": "2025-11-05T14:36:50.872013",
+  "stitched_image_path": "<not_yet_saved>",
+  "quadrants": [
+    {
+      "quadrant": "NE",
+      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-10.34.56-4134-opnT2_NE.czi",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "position_shift": [
+        512.0,
+        0.0
+      ]
+    },
+    {
+      "quadrant": "NW",
+      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-10.34.56-4134-opnT2_NW.czi",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "position_shift": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "quadrant": "SE",
+      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-10.34.56-4134-opnT2_SE.czi",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "position_shift": [
+        512.0,
+        512.0
+      ]
+    },
+    {
+      "quadrant": "SW",
+      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-10.34.56-4134-opnT2_SW.czi",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "position_shift": [
+        0.0,
+        512.0
+      ]
+    }
+  ]
+}
