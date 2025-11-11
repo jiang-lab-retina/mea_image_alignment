@@ -1,23 +1,23 @@
 {
   "version": "1.0",
-  "timestamp": "2025-11-05T14:36:50.872013",
+  "timestamp": "2025-11-11T11:31:47.770430",
   "stitched_image_path": "<not_yet_saved>",
   "quadrants": [
     {
       "quadrant": "NE",
-      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-10.34.56-4134-opnT2_NE.czi",
+      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-09.58.50-4141-opnT2_NE.czi",
       "dimensions": [
         1024,
         1024
       ],
       "position_shift": [
-        512.0,
-        0.0
+        315.3760070800781,
+        10.695134162902832
       ]
     },
     {
       "quadrant": "NW",
-      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-10.34.56-4134-opnT2_NW.czi",
+      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-09.58.50-4141-opnT2_NW.czi",
       "dimensions": [
         1024,
         1024
@@ -29,27 +29,35 @@
     },
     {
       "quadrant": "SE",
-      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-10.34.56-4134-opnT2_SE.czi",
+      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-09.58.50-4141-opnT2_SE.czi",
       "dimensions": [
         1024,
         1024
       ],
       "position_shift": [
-        512.0,
-        512.0
+        308.1092834472656,
+        331.2394104003906
       ]
     },
     {
       "quadrant": "SW",
-      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-10.34.56-4134-opnT2_SW.czi",
+      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-09.58.50-4141-opnT2_SW.czi",
       "dimensions": [
         1024,
         1024
       ],
       "position_shift": [
-        0.0,
-        512.0
+        -16.004703521728516,
+        280.2162780761719
       ]
     }
+  ],
+  "final_dimensions": [
+    1375,
+    1348
+  ],
+  "origin_offset": [
+    0.0,
+    0.0
   ]
 }

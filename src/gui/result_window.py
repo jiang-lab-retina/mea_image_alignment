@@ -402,8 +402,32 @@ class ResultWindow(QWidget):
     
     def _on_save_clicked(self):
         """Handle Save As button click."""
-        # Show file dialog
-        default_name = f"stitched_{self.result.timestamp.strftime('%Y%m%d_%H%M%S')}.{self.result.stitching_config.output_format}"
+        # Build default filename from prefix + ("original" | "chip")
+        # Prefix is the CZI filename without the quadrant suffix (NE/NW/SE/SW)
+        def _extract_prefix() -> str:
+            try:
+                # Prefer alignment parameters' original image paths
+                if getattr(self.result, "alignment_parameters", None) and self.result.alignment_parameters.quadrants:
+                    orig_path = self.result.alignment_parameters.quadrants[0].original_image_path
+                    stem = Path(orig_path).stem
+                elif self.result.source_quadrants:
+                    stem = Path(self.result.source_quadrants[0].file_path).stem
+                else:
+                    return "stitched"
+                quad_tags = {"NE", "NW", "SE", "SW"}
+                if len(stem) >= 2 and stem[-2:].upper() in quad_tags:
+                    return stem[:-2]
+                return stem
+            except Exception:
+                return "stitched"
+        
+        from pathlib import Path
+        prefix = _extract_prefix()
+        tag = "chip" if getattr(self.result, "is_chip_stitch", False) else "original"
+        # Map output format to extension
+        ext_map = {"tiff": ".tiff", "png": ".png", "jpeg": ".jpg"}
+        ext = ext_map.get(self.result.stitching_config.output_format, ".tiff")
+        default_name = f"{prefix}{tag}{ext}"
         
         file_path, _ = QFileDialog.getSaveFileName(
             self,

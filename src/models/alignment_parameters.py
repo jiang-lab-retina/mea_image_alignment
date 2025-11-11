@@ -7,7 +7,7 @@ from quadrant stitching operations, enabling parameter reuse for chip image stit
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from src.models import Quadrant
 
 
@@ -41,11 +41,15 @@ class AlignmentParameters:
         timestamp: ISO 8601 timestamp of parameter generation
         stitched_image_path: Path to the stitched output image
         quadrants: List of per-quadrant alignment data
+        final_dimensions: Optional (width, height) of the final stitched image
+        origin_offset: Optional (ox, oy) offset applied to make all positions non-negative
     """
     version: str
     timestamp: str
     stitched_image_path: Path
     quadrants: List[QuadrantAlignment]
+    final_dimensions: Optional[Tuple[int, int]] = None
+    origin_offset: Optional[Tuple[float, float]] = None
 
 
 def to_dict(params: AlignmentParameters) -> dict:
@@ -58,7 +62,7 @@ def to_dict(params: AlignmentParameters) -> dict:
     Returns:
         Dictionary suitable for JSON serialization
     """
-    return {
+    data = {
         "version": params.version,
         "timestamp": params.timestamp,
         "stitched_image_path": str(params.stitched_image_path),
@@ -72,6 +76,11 @@ def to_dict(params: AlignmentParameters) -> dict:
             for qa in params.quadrants
         ]
     }
+    if params.final_dimensions is not None:
+        data["final_dimensions"] = list(params.final_dimensions)
+    if params.origin_offset is not None:
+        data["origin_offset"] = list(params.origin_offset)
+    return data
 
 
 def from_dict(data: dict) -> AlignmentParameters:
@@ -88,7 +97,7 @@ def from_dict(data: dict) -> AlignmentParameters:
         KeyError: If required fields are missing
         ValueError: If field values are invalid
     """
-    return AlignmentParameters(
+    params = AlignmentParameters(
         version=data["version"],
         timestamp=data["timestamp"],
         stitched_image_path=Path(data["stitched_image_path"]),
@@ -102,3 +111,9 @@ def from_dict(data: dict) -> AlignmentParameters:
             for qa in data["quadrants"]
         ]
     )
+    # Optional fields
+    if "final_dimensions" in data:
+        params.final_dimensions = tuple(data["final_dimensions"])
+    if "origin_offset" in data:
+        params.origin_offset = tuple(data["origin_offset"])
+    return params
