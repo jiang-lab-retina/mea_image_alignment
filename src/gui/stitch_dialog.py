@@ -67,12 +67,13 @@ class StitchDialog(QDialog):
         
         # Alignment method
         self.alignment_combo = QComboBox()
-        self.alignment_combo.addItems(["orb", "sift", "akaze"])
+        self.alignment_combo.addItems(["orb", "sift", "akaze", "skimage"])
         self.alignment_combo.setToolTip(
             "<b>Alignment Method</b><br>"
             "<b>ORB:</b> Fast, good for textured images (default)<br>"
             "<b>SIFT:</b> Robust, handles scale/rotation well (slower)<br>"
-            "<b>AKAZE:</b> Balance of speed and quality"
+            "<b>AKAZE:</b> Balance of speed and quality<br>"
+            "<b>Scikit-image:</b> Phase correlation with sub-pixel accuracy (best for cells/uniform textures)"
         )
         algo_layout.addRow("Alignment Method:", self.alignment_combo)
         
@@ -150,6 +151,77 @@ class StitchDialog(QDialog):
         
         quality_group.setLayout(quality_layout)
         layout.addWidget(quality_group)
+        
+        # Alignment Limits group
+        limits_group = QGroupBox("Alignment Limits")
+        limits_layout = QFormLayout()
+        limits_layout.setSpacing(10)
+        
+        # Max rotation degrees
+        rotation_widget = QWidget()
+        rotation_layout = QVBoxLayout(rotation_widget)
+        rotation_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.rotation_slider = QSlider(Qt.Orientation.Horizontal)
+        self.rotation_slider.setMinimum(0)
+        self.rotation_slider.setMaximum(20)  # 0-20 degrees
+        self.rotation_slider.setValue(5)
+        self.rotation_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.rotation_slider.setTickInterval(5)
+        self.rotation_slider.setToolTip(
+            "<b>Maximum Rotation</b><br>"
+            "Maximum allowed rotation angle during alignment.<br>"
+            "Lower values (1-5°): Stricter, rejects large rotations<br>"
+            "Higher values (10-20°): More permissive for rotated samples"
+        )
+        
+        self.rotation_label = QLabel("±5°")
+        self.rotation_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.rotation_label.setStyleSheet("font-weight: bold;")
+        
+        self.rotation_slider.valueChanged.connect(
+            lambda v: self.rotation_label.setText(f"±{v}°")
+        )
+        
+        rotation_layout.addWidget(self.rotation_slider)
+        rotation_layout.addWidget(self.rotation_label)
+        
+        limits_layout.addRow("Max Rotation:", rotation_widget)
+        
+        # Max zoom percent
+        zoom_widget = QWidget()
+        zoom_layout = QVBoxLayout(zoom_widget)
+        zoom_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.zoom_slider = QSlider(Qt.Orientation.Horizontal)
+        self.zoom_slider.setMinimum(0)
+        self.zoom_slider.setMaximum(10)  # 0-10%
+        self.zoom_slider.setValue(5)
+        self.zoom_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.zoom_slider.setTickInterval(2)
+        self.zoom_slider.setToolTip(
+            "<b>Maximum Zoom/Scale</b><br>"
+            "Maximum allowed scale adjustment during alignment.<br>"
+            "0%: No scaling allowed (translation only)<br>"
+            "5%: Allow ±5% scale (0.95x to 1.05x)<br>"
+            "10%: Allow ±10% scale for significant magnification differences"
+        )
+        
+        self.zoom_label = QLabel("±5%")
+        self.zoom_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.zoom_label.setStyleSheet("font-weight: bold;")
+        
+        self.zoom_slider.valueChanged.connect(
+            lambda v: self.zoom_label.setText(f"±{v}%")
+        )
+        
+        zoom_layout.addWidget(self.zoom_slider)
+        zoom_layout.addWidget(self.zoom_label)
+        
+        limits_layout.addRow("Max Zoom:", zoom_widget)
+        
+        limits_group.setLayout(limits_layout)
+        layout.addWidget(limits_group)
         
         # Output group
         output_group = QGroupBox("Output Settings")
@@ -240,6 +312,8 @@ class StitchDialog(QDialog):
         self.interp_combo.setCurrentText(self.config.interpolation_method)
         self.format_combo.setCurrentText(self.config.output_format)
         self.compression_slider.setValue(self.config.compression_level)
+        self.rotation_slider.setValue(int(self.config.max_rotation_degrees))
+        self.zoom_slider.setValue(int(self.config.max_zoom_percent))
     
     def _reset_to_defaults(self):
         """Reset all parameters to default values."""
@@ -260,6 +334,9 @@ class StitchDialog(QDialog):
             logger.error(f"Invalid compression level: {compression}")
             return
         
+        rotation = self.rotation_slider.value()
+        zoom = self.zoom_slider.value()
+        
         # Create new config from UI values
         self.config = StitchingConfig(
             alignment_method=self.alignment_combo.currentText(),
@@ -270,12 +347,15 @@ class StitchDialog(QDialog):
             confidence_threshold=self.config.confidence_threshold,  # Keep existing
             output_format=self.format_combo.currentText(),
             compression_level=compression,
-            missing_quadrant_fill=self.config.missing_quadrant_fill  # Keep existing
+            missing_quadrant_fill=self.config.missing_quadrant_fill,  # Keep existing
+            max_rotation_degrees=float(rotation),
+            max_zoom_percent=float(zoom)
         )
         
         logger.info(
             f"Stitching configured: alignment={self.config.alignment_method}, "
-            f"blend={self.config.blend_mode}, overlap={self.config.overlap_threshold_percent}%"
+            f"blend={self.config.blend_mode}, overlap={self.config.overlap_threshold_percent}%, "
+            f"max_rotation=±{rotation}°, max_zoom=±{zoom}%"
         )
         
         self.accept()

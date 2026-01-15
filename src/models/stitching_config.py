@@ -20,6 +20,7 @@ class StitchingConfig:
             - "orb": Oriented FAST and Rotated BRIEF (fast, good for texture)
             - "sift": Scale-Invariant Feature Transform (robust, slower)
             - "akaze": Accelerated KAZE (balance of speed and quality)
+            - "skimage": Scikit-image phase correlation (sub-pixel accurate, best for uniform textures)
         
         blend_mode: Method for blending overlapping regions
             - "linear": Simple linear blend based on distance from edge
@@ -59,14 +60,24 @@ class StitchingConfig:
             - "black": Fill with black pixels
             - "white": Fill with white pixels
             - "interpolate": Estimate from adjacent quadrants (experimental)
+        
+        max_rotation_degrees: Maximum allowed rotation angle in degrees (0.0-180.0)
+            Rotation angles exceeding this limit will generate warnings
+            Default 10.0 degrees allows ±10° rotation
+        
+        max_zoom_percent: Maximum allowed zoom/scale adjustment in percent (0.0-20.0)
+            Allows ±max_zoom_percent scaling during alignment
+            Default 5.0 allows ±5% zoom (scale 0.95 to 1.05)
     
     Validation Rules:
     - overlap_threshold_percent must be in range [5, 50]
     - confidence_threshold must be in range [0.0, 1.0]
     - compression_level must be in range [0, 9]
+    - max_rotation_degrees must be in range [0.0, 180.0]
+    - max_zoom_percent must be in range [0.0, 20.0]
     """
     
-    alignment_method: Literal["orb", "sift", "akaze"] = "orb"
+    alignment_method: Literal["orb", "sift", "akaze", "skimage"] = "orb"
     blend_mode: Literal["linear", "multiband", "feather"] = "multiband"
     overlap_threshold_percent: float = 15.0
     resize_strategy: Literal["largest", "smallest", "average"] = "largest"
@@ -75,6 +86,8 @@ class StitchingConfig:
     output_format: Literal["tiff", "png", "jpeg"] = "tiff"
     compression_level: int = 5
     missing_quadrant_fill: Literal["black", "white", "interpolate"] = "black"
+    max_rotation_degrees: float = 5.0
+    max_zoom_percent: float = 5.0  # Allow ±5% zoom by default
     
     def __post_init__(self):
         """Validate configuration parameters."""
@@ -95,6 +108,18 @@ class StitchingConfig:
                 f"compression_level must be in range [0, 9], "
                 f"got {self.compression_level}"
             )
+        
+        if not (0.0 <= self.max_rotation_degrees <= 180.0):
+            raise ValueError(
+                f"max_rotation_degrees must be in range [0.0, 180.0], "
+                f"got {self.max_rotation_degrees}"
+            )
+        
+        if not (0.0 <= self.max_zoom_percent <= 20.0):
+            raise ValueError(
+                f"max_zoom_percent must be in range [0.0, 20.0], "
+                f"got {self.max_zoom_percent}"
+            )
     
     def to_dict(self) -> dict:
         """
@@ -113,6 +138,8 @@ class StitchingConfig:
             "output_format": self.output_format,
             "compression_level": self.compression_level,
             "missing_quadrant_fill": self.missing_quadrant_fill,
+            "max_rotation_degrees": self.max_rotation_degrees,
+            "max_zoom_percent": self.max_zoom_percent,
         }
     
     @classmethod
@@ -126,7 +153,15 @@ class StitchingConfig:
         Returns:
             New StitchingConfig instance
         """
-        return cls(**data)
+        # Handle backward compatibility - use defaults for missing fields
+        valid_fields = {
+            'alignment_method', 'blend_mode', 'overlap_threshold_percent',
+            'resize_strategy', 'interpolation_method', 'confidence_threshold',
+            'output_format', 'compression_level', 'missing_quadrant_fill',
+            'max_rotation_degrees', 'max_zoom_percent'
+        }
+        filtered_data = {k: v for k, v in data.items() if k in valid_fields}
+        return cls(**filtered_data)
     
     @classmethod
     def default(cls) -> 'StitchingConfig':
@@ -146,5 +181,7 @@ class StitchingConfig:
             output_format="tiff",
             compression_level=5,
             missing_quadrant_fill="black",
+            max_rotation_degrees=5.0,
+            max_zoom_percent=5.0,
         )
 

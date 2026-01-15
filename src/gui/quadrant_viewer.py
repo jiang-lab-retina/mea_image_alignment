@@ -199,9 +199,10 @@ class QuadrantViewer(QWidget):
         # Determine image format
         if image_data.ndim == 2:
             # Grayscale
+            image_data = np.ascontiguousarray(image_data)
             bytes_per_line = width
             qimage = QImage(
-                image_data.data,
+                bytes(image_data.data),
                 width,
                 height,
                 bytes_per_line,
@@ -214,7 +215,7 @@ class QuadrantViewer(QWidget):
                 image_data = np.ascontiguousarray(image_data)
                 bytes_per_line = 3 * width
                 qimage = QImage(
-                    image_data.data,
+                    bytes(image_data.data),
                     width,
                     height,
                     bytes_per_line,
@@ -225,7 +226,7 @@ class QuadrantViewer(QWidget):
                 image_data = np.ascontiguousarray(image_data)
                 bytes_per_line = 4 * width
                 qimage = QImage(
-                    image_data.data,
+                    bytes(image_data.data),
                     width,
                     height,
                     bytes_per_line,
@@ -233,10 +234,10 @@ class QuadrantViewer(QWidget):
                 )
             else:
                 # Take first channel
-                image_data = image_data[:, :, 0]
+                image_data = np.ascontiguousarray(image_data[:, :, 0])
                 bytes_per_line = width
                 qimage = QImage(
-                    image_data.data,
+                    bytes(image_data.data),
                     width,
                     height,
                     bytes_per_line,

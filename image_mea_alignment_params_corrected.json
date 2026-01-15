@@ -1,0 +1,71 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-01-14T12:04:27.870985",
+  "stitched_image_path": "<not_yet_saved>",
+  "quadrants": [
+    {
+      "quadrant": "NE",
+      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-10.34.56-4134-opnT2_NE.czi",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "position_shift": [
+        307.5768127441406,
+        14.1817045211792
+      ],
+      "rotation_degrees": -0.6097515490970647,
+      "zoom_percent": 0.0
+    },
+    {
+      "quadrant": "NW",
+      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-10.34.56-4134-opnT2_NW.czi",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "position_shift": [
+        0.0,
+        0.0
+      ],
+      "rotation_degrees": 0.0,
+      "zoom_percent": 0.0
+    },
+    {
+      "quadrant": "SE",
+      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-10.34.56-4134-opnT2_SE.czi",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "position_shift": [
+        315.86712646484375,
+        333.8084716796875
+      ],
+      "rotation_degrees": -0.34744568235634654,
+      "zoom_percent": 0.0
+    },
+    {
+      "quadrant": "SW",
+      "original_image_path": "/Users/zhengjiang/Local Documents/Python_Projects_2024/Image_MEA_Dulce/raw_data/2025.10.22_opnT2/2025.10.22-10.34.56-4134-opnT2_SW.czi",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "position_shift": [
+        -4.102197647094727,
+        339.9212646484375
+      ],
+      "rotation_degrees": 0.621283272231879,
+      "zoom_percent": 0.0
+    }
+  ],
+  "final_dimensions": [
+    1322,
+    1028
+  ],
+  "origin_offset": [
+    0.0,
+    0.0
+  ]
+}

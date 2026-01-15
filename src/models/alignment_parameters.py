@@ -21,11 +21,15 @@ class QuadrantAlignment:
         original_image_path: Path to the original quadrant image file
         dimensions: (width, height) of the original image in pixels
         position_shift: (dx, dy) position shift in pixels for alignment
+        rotation_degrees: Rotation angle in degrees relative to NW reference (default 0.0)
+        zoom_percent: Zoom/scale adjustment in percent (-5 to +5, default 0.0)
     """
     quadrant: Quadrant
     original_image_path: Path
     dimensions: Tuple[int, int]
     position_shift: Tuple[float, float]
+    rotation_degrees: float = 0.0
+    zoom_percent: float = 0.0
 
 
 @dataclass
@@ -71,7 +75,9 @@ def to_dict(params: AlignmentParameters) -> dict:
                 "quadrant": qa.quadrant.value,
                 "original_image_path": str(qa.original_image_path),
                 "dimensions": list(qa.dimensions),
-                "position_shift": list(qa.position_shift)
+                "position_shift": list(qa.position_shift),
+                "rotation_degrees": qa.rotation_degrees,
+                "zoom_percent": qa.zoom_percent
             }
             for qa in params.quadrants
         ]
@@ -106,7 +112,9 @@ def from_dict(data: dict) -> AlignmentParameters:
                 quadrant=Quadrant[qa["quadrant"]],
                 original_image_path=Path(qa["original_image_path"]),
                 dimensions=tuple(qa["dimensions"]),
-                position_shift=tuple(qa["position_shift"])
+                position_shift=tuple(qa["position_shift"]),
+                rotation_degrees=qa.get("rotation_degrees", 0.0),  # Backward compatible default
+                zoom_percent=qa.get("zoom_percent", 0.0)  # Backward compatible default
             )
             for qa in data["quadrants"]
         ]

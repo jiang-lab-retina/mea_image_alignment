@@ -11,7 +11,7 @@ import numpy as np
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QFileDialog, QMessageBox, QStatusBar, QToolBar, QLabel,
-    QProgressDialog
+    QProgressDialog, QTabWidget
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon
@@ -25,6 +25,7 @@ from src.gui.quadrant_viewer import QuadrantViewer
 from src.gui.assignment_dialog import AssignmentDialog
 from src.gui.stitch_dialog import StitchDialog
 from src.gui.result_window import ResultWindow
+from src.gui.corner_tab import CornerTab
 
 logger = logging.getLogger(__name__)
 
@@ -138,26 +139,13 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("NSEW Image Stitcher - Image MEA Dulce")
         self.setMinimumSize(1200, 800)
         
-        # Create central widget with grid layout
+        # Create central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(8, 8, 8, 8)
         main_layout.setSpacing(8)
-        
-        # Title header
-        title_label = QLabel("<h2>NSEW Image Stitcher</h2>")
-        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_label.setStyleSheet("""
-            QLabel {
-                color: #2e7d32;
-                padding: 8px;
-                background-color: #f1f8e9;
-                border-radius: 4px;
-            }
-        """)
-        main_layout.addWidget(title_label)
         
         # Toolbar
         toolbar = QToolBar()
@@ -220,23 +208,40 @@ class MainWindow(QMainWindow):
         
         self.addToolBar(toolbar)
         
+        # Tabs
+        tabs = QTabWidget()
+        # Stitch tab content
+        stitch_tab = QWidget()
+        stitch_layout = QVBoxLayout(stitch_tab)
+        # Title header inside Stitch tab
+        title_label = QLabel("<h2>NSEW Image Stitcher</h2>")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setStyleSheet("""
+            QLabel {
+                color: #2e7d32;
+                padding: 8px;
+                background-color: #f1f8e9;
+                border-radius: 4px;
+            }
+        """)
+        stitch_layout.addWidget(title_label)
         # 2x2 grid for quadrant viewers
         grid_layout = QGridLayout()
         grid_layout.setSpacing(8)
-        
-        # Create quadrant viewers
         for quadrant in Quadrant:
             viewer = QuadrantViewer()
             self.quadrant_viewers[quadrant] = viewer
-            
-            # Position in grid based on quadrant
             row, col = quadrant.position_indices()
             grid_layout.addWidget(viewer, row, col)
-            
-            # Set initial placeholder
             viewer.position_label.setText(quadrant.label)
-        
-        main_layout.addLayout(grid_layout)
+        grid_container = QWidget()
+        grid_container.setLayout(grid_layout)
+        stitch_layout.addWidget(grid_container, 1)
+        tabs.addTab(stitch_tab, "Stitch")
+        # Corner tab
+        self.corner_tab = CornerTab(self)
+        tabs.addTab(self.corner_tab, "Corner")
+        main_layout.addWidget(tabs, 1)
         
         # Status bar
         self.status_bar = QStatusBar()
@@ -660,11 +665,12 @@ class MainWindow(QMainWindow):
     def _handle_stitching_progress(self, percent: int, message: str):
         """Handle progress updates from stitching thread."""
         try:
-            if self.progress_dialog:
+            if self.progress_dialog and not self.progress_dialog.wasCanceled():
                 self.progress_dialog.setValue(percent)
                 self.progress_dialog.setLabelText(message)
-        except Exception as e:
-            logger.error(f"Error updating progress: {e}")
+        except (RuntimeError, AttributeError):
+            # Dialog may be closed/deleted during progress updates - this is expected
+            pass
     
     def _handle_stitching_complete(self, result: StitchedResult):
         """Handle successful stitching completion."""
@@ -694,8 +700,11 @@ class MainWindow(QMainWindow):
             
             # Show result window
             try:
+                logger.info("Creating ResultWindow...")
                 result_window = ResultWindow(result, parent=self)
+                logger.info("ResultWindow created, showing...")
                 result_window.show()
+                logger.info("ResultWindow shown")
             except Exception as e:
                 logger.exception("Error creating result window")
                 QMessageBox.warning(
@@ -820,6 +829,38 @@ class MainWindow(QMainWindow):
                 QMessageBox.StandardButton.Ok
             )
     
+    def _reload_alignment_params_from_json(self):
+        """
+        Reload alignment parameters from JSON file.
+        
+        This is called before chip stitching to ensure any corrections made
+        via the ResultWindow's "Update Config for Chip Stitch" button are used.
+        """
+        try:
+            param_path = Path.cwd() / ".image_mea_alignment_params.json"
+            
+            if not param_path.exists():
+                logger.debug("No alignment parameters file to reload")
+                return
+            
+            # Load parameters
+            params = alignment_manager.load_alignment_params(param_path)
+            
+            # Basic validation (without checking file existence which is slow)
+            validation = alignment_manager.validate_alignment_params(
+                params, 
+                check_file_existence=False
+            )
+            
+            if validation.is_valid:
+                self.alignment_parameters = params
+                logger.info(f"Reloaded alignment parameters from JSON: final_dimensions={params.final_dimensions}")
+            else:
+                logger.warning(f"JSON alignment params invalid: {validation.errors}")
+                
+        except Exception as e:
+            logger.warning(f"Could not reload alignment parameters from JSON: {e}")
+    
     def load_saved_alignment_params(self):
         """
         Load previously saved alignment parameters (T025-T026).
@@ -901,12 +942,16 @@ class MainWindow(QMainWindow):
         Handle chip stitching button click (T033-T035).
         
         Workflow:
-        1. Discover chip images using alignment parameters (T033)
-        2. Display error if no chip images found (T034)
-        3. Show discovery results summary before proceeding (T035)
-        4. Proceed to chip stitching (Phase 5 implementation)
+        1. Reload alignment parameters from JSON (in case user updated via ResultWindow)
+        2. Discover chip images using alignment parameters (T033)
+        3. Display error if no chip images found (T034)
+        4. Show discovery results summary before proceeding (T035)
+        5. Proceed to chip stitching (Phase 5 implementation)
         """
         logger.info("Chip stitching button clicked")
+        
+        # Reload alignment parameters from JSON to pick up any corrections made in ResultWindow
+        self._reload_alignment_params_from_json()
         
         if not self.alignment_parameters:
             QMessageBox.warning(
@@ -1046,11 +1091,12 @@ class MainWindow(QMainWindow):
     def _handle_chip_stitching_progress(self, percent: int, message: str):
         """Handle chip stitching progress updates (T052)."""
         try:
-            if self.chip_progress_dialog:
+            if self.chip_progress_dialog and not self.chip_progress_dialog.wasCanceled():
                 self.chip_progress_dialog.setValue(percent)
                 self.chip_progress_dialog.setLabelText(f"{message} ({percent}%)")
-        except Exception as e:
-            logger.exception("Error updating chip stitching progress")
+        except (RuntimeError, AttributeError):
+            # Dialog may be closed/deleted during progress updates - this is expected
+            pass
     
     def _handle_chip_stitching_complete(self, result: StitchedResult):
         """Handle chip stitching completion (T053-T054)."""

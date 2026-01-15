@@ -58,6 +58,8 @@ output/
 *.png
 *.jpg
 *.jpeg
+*.tif
+*.tiff
 
 # macOS
 .DS_Store

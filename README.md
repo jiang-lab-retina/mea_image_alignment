@@ -1,161 +1,167 @@
-# Image MEA Dulce
+# Image MEA Alignment - Quadrant Stitching
 
-**Image processing program for Multi-Electrode Array (MEA) data alignment with GUI interface**
+This project provides tools for aligning and stitching 2×2 quadrant microscopy images (NW, NE, SW, SE) for MEA (Microelectrode Array) imaging.
 
-## Overview
+## Recommended Method: Cellpose-based Alignment
 
-Image MEA Dulce is a scientific image processing tool designed for aligning and analyzing microscopy data from Multi-Electrode Array experiments. The application provides an intuitive graphical user interface that allows researchers to configure key processing parameters and perform reproducible data alignment operations.
-
-## Features
-
-- **Data Alignment**: Advanced image alignment algorithms for MEA microscopy data
-- **GUI Interface**: User-friendly interface for parameter configuration and visualization
-- **Reproducible Processing**: All processing operations are fully reproducible with saved configurations
-- **Data Integrity**: Original raw data is never modified; all processing operates on copies
-- **Quality Validation**: Built-in quality metrics and validation for processing results
-
-## Supported Formats
-
-- **Primary**: `.czi` (Carl Zeiss Image format) - native microscopy data format
-- **Additional formats**: TBD based on requirements
-
-## Project Status
-
-🚧 **In Development** - Constitution and architectural guidelines established
-
-## Architecture Principles
-
-This project follows strict architectural principles documented in the [Constitution](./.specify/memory/constitution.md):
-
-1. **Data Integrity First**: Preservation of scientific data throughout all processing
-2. **User-Friendly GUI**: Intuitive interface with real-time feedback
-3. **Reproducible Processing**: Full reproducibility with parameter tracking
-4. **Validation & Quality Control**: Automated quality assessment
-5. **Modular Architecture**: Separation of processing logic from GUI
-
-## Features
-
-### NSEW Image Stitcher (v0.1.0)
-The first feature of Image MEA Dulce is a specialized tool for stitching microscopy images based on spatial quadrants:
-
-- **Quadrant Visualization**: Load and view up to 4 images arranged by N/S/E/W keywords
-- **Automatic Keyword Detection**: Intelligently identifies image positions from filenames
-- **Multi-Format Support**: Compatible with `.czi`, `.lsm`, `.tif`, and `.tiff` files
-- **Advanced Stitching**: High-quality image alignment and blending with configurable parameters
-- **Quality Metrics**: Real-time feedback on stitching quality and alignment confidence
-- **Large Image Handling**: Automatic downsampling for memory-efficient display of large results
-
-## Getting Started
-
-### Prerequisites
-- Python 3.10 or higher
-- 4GB RAM minimum (8GB recommended for large images)
-- Display with at least 1920x1080 resolution
+The **Cellpose CLI method** provides the best alignment results by detecting cells in each quadrant and matching cell centers in overlapping regions.
 
 ### Installation
 
-1. **Clone the repository**:
 ```bash
-git clone https://github.com/jiang-lab-retina/mea_image_alignment.git
-cd mea_image_alignment
+pip install cellpose torch torchvision  # For Apple Silicon (MPS)
+# OR
+pip install cellpose[gpu]  # For CUDA GPU
 ```
 
-2. **Create a virtual environment** (recommended):
+### Usage
+
+Run from the project root directory:
+
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Basic usage with GPU/MPS acceleration
+python cellpose/code/align_cellpose.py \
+    --input-dir "raw_data/2025.10.22_opnT2" \
+    --prefix "2025.10.22-10.34.56-4134-opnT2_" \
+    --gpu
+
+# Full options
+python cellpose/code/align_cellpose.py \
+    --input-dir "raw_data/2025.10.22_opnT2" \
+    --prefix "2025.10.22-10.34.56-4134-opnT2_" \
+    --output-dir "cellpose/output" \
+    --diameter 15 \
+    --flow-threshold 0.1 \
+    --cellprob-threshold -3.5 \
+    --min-size 325 \
+    --overlap 70 \
+    --zoom \
+    --max-zoom 5 \
+    --gpu
 ```
 
-3. **Install dependencies**:
+### Optimized Parameters
+
+The following parameters have been tuned for best cell detection:
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `--diameter` | `15` | Expected cell diameter (pixels) |
+| `--flow-threshold` | `0.1` | Flow threshold for segmentation |
+| `--cellprob-threshold` | `-3.5` | Cell probability threshold |
+| `--min-size` | `325` | Minimum cell area (pixels) |
+| `--overlap` | `70` | Expected overlap between quadrants (%) |
+
+> **Note:** Cellpose v4.x uses **CPSAM** (Cellpose Segment Anything Model) by default and ignores the `--model` parameter. CPSAM provides better accuracy than previous models (cyto, cyto2, cyto3).
+
+### Output Files
+
+| File | Description |
+|------|-------------|
+| `cellpose_alignment.png` | Visualization of cell detection and alignment |
+| `cellpose_stitched.png` | Stitched image (mean projection) |
+| `cellpose_stitched_overlay.png` | Stitched image (overlay, NW on top) |
+| `cellpose_stitched_comparison.png` | Side-by-side comparison |
+| `cellpose_chip_stitched.png` | Chip layer stitched (mean) |
+| `cellpose_chip_overlay.png` | Chip layer stitched (overlay) |
+| `cellpose_alignment_params.json` | Alignment parameters (dx, dy, zoom) |
+
+### Parameter Testing
+
+To test different Cellpose parameters on a single quadrant:
+
 ```bash
-pip install -r requirements.txt
+python cellpose/code/test_cellpose_params.py \
+    --input-dir "raw_data/2025.10.22_opnT2" \
+    --prefix "2025.10.22-10.34.56-4134-opnT2_" \
+    --gpu
+
+# Test on all quadrants with best parameters
+python cellpose/code/test_cellpose_params.py \
+    --input-dir "raw_data/2025.10.22_opnT2" \
+    --prefix "2025.10.22-10.34.56-4134-opnT2_" \
+    --gpu \
+    --all-quadrants
 ```
 
-4. **Install the package**:
+---
+
+## Alternative CLI Methods
+
+### CV2-based Alignment
+
+Uses OpenCV for alignment via ECC (Enhanced Correlation Coefficient) or feature matching.
+
 ```bash
-pip install -e .
+python cv2_alignment/code/align_cv2.py \
+    --input-dir "raw_data/2025.10.22_opnT2" \
+    --prefix "2025.10.22-10.34.56-4134-opnT2_" \
+    --method ecc \
+    --max-rotation 5 \
+    --max-zoom 5
 ```
 
-### Quick Start
+**Note:** CV2 methods are less reliable than Cellpose for cell-dense images.
 
-1. **Launch the application**:
+### Grid Optimization
+
+Grid-based NCC (Normalized Cross-Correlation) optimization methods:
+
 ```bash
-python main.py
+python grid_optimization/code/optimize_alignment.py \
+    --input-dir "raw_data/2025.10.22_opnT2" \
+    --prefix "2025.10.22-10.34.56-4134-opnT2_"
 ```
 
-2. **Load images**:
-   - Click "Load Images" button
-   - Select 1-4 microscopy images with NSEW keywords in filenames
-   - Example: `experiment_NE.czi`, `experiment_SW.czi`
+**Note:** Grid methods work for general image alignment but are less accurate than cell-based matching.
 
-3. **View quadrants**:
-   - Images are automatically arranged by spatial position
-   - Use zoom and pan controls to inspect details
-   - Verify alignment before stitching
+---
 
-4. **Stitch images**:
-   - Click "Stitch Images" button
-   - Adjust parameters (optional): blend mode, overlap threshold, alignment method
-   - Monitor progress in real-time
-   - View quality metrics in result window
+## GUI (Deprecated)
 
-5. **Save results**:
-   - Use "Save As" button in result window
-   - Choose format: TIFF (lossless), PNG, or JPEG
-   - Full resolution saved to disk, optimized view displayed
+⚠️ **The GUI interface is not working well and has been abandoned.**
 
-### Chip Image Stitching (v0.2.0)
+The GUI code remains in `src/gui/` for reference but is not maintained. Use the CLI methods instead.
 
-The application now supports stitching chip images using alignment parameters from original stitching, providing ~50% time savings:
+---
 
-1. **Perform original stitching first**:
-   - Load and stitch original quadrant images (e.g., `prefix_NE.czi`, `prefix_NW.czi`)
-   - Alignment parameters are automatically saved to `.image_mea_alignment_params.json`
+## Project Structure
 
-2. **Click "Stitch Chip Images"**:
-   - Automatically discovers chip images (e.g., `prefix_chipNE.czi`, `prefix_chipNW.czi`)
-   - Shows discovery summary with found/missing chips and dimension mismatches
+```
+Image_MEA_Dulce/
+├── cellpose/                    # Cellpose-based alignment (RECOMMENDED)
+│   ├── code/
+│   │   ├── align_cellpose.py    # Main alignment script
+│   │   └── test_cellpose_params.py
+│   ├── output/                  # Generated plots and results
+│   └── logs/
+│
+├── cv2_alignment/               # OpenCV-based alignment
+│   ├── code/
+│   │   └── align_cv2.py
+│   ├── output/
+│   └── logs/
+│
+├── grid_optimization/           # Grid NCC optimization
+│   ├── code/
+│   │   ├── optimize_alignment.py
+│   │   └── optimize_grid_alignment.py
+│   ├── output/
+│   └── logs/
+│
+├── raw_data/                    # Input CZI files
+├── src/                         # Core library (GUI deprecated)
+├── main.py                      # Legacy entry point
+└── requirements.txt
+```
 
-3. **Review and confirm**:
-   - Check chip image discovery results
-   - Missing chips will use black placeholders
-   - Dimension mismatches will be automatically resized
+---
 
-4. **Monitor progress**:
-   - Real-time progress updates during chip stitching
-   - Bypasses feature detection for faster processing
-   - Applies stored alignment from original stitching
+## Input Format
 
-5. **View chip results**:
-   - Result window displays chip-specific metadata
-   - Shows found chips, placeholders, and dimension transformations
-   - Includes processing time and quality metrics
+- **CZI files**: Grayscale Z-stack microscopy images
+- **Naming convention**: `{prefix}{quadrant}.czi` (e.g., `2025.10.22-10.34.56-4134-opnT2_NW.czi`)
+- **Chip images**: `{prefix}chip{quadrant}.czi`
+- **Quadrants**: NW, NE, SW, SE
 
-**Key Features**:
-- **Automatic Discovery**: Finds chip images using `prefix_chipQUADRANT.ext` pattern
-- **Missing Chip Handling**: Generates pure black (RGB: 0,0,0) placeholders
-- **Dimension Normalization**: Automatically resizes mismatched chip dimensions
-- **Alignment Reuse**: Bypasses feature detection by reusing original position shifts
-- **Persistent Parameters**: Alignment saved/loaded automatically for workflow continuity
-
-### Example Filenames
-The application detects spatial position from keywords:
-- `2025.10.22-09.58.50-4141-opnT2_NE.czi` → North-East quadrant
-- `sample_northwest_image.lsm` → North-West quadrant
-- `data_SE_final.tif` → South-East quadrant
-- `experiment-SW.tiff` → South-West quadrant
-
-## Development
-
-For development guidelines and workflow, see:
-- [Constitution](./.specify/memory/constitution.md) - Core principles and standards
-- [Templates](./.specify/templates/) - Specification and planning templates
-
-## License
-
-*TBD*
-
-## Contributors
-
-*TBD*
-
+Z-stacks are automatically mean-projected along the Z-axis before processing.

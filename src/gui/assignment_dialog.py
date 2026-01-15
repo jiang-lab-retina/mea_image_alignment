@@ -263,9 +263,10 @@ class AssignmentDialog(QDialog):
         height, width = image_data.shape[:2]
         
         if image_data.ndim == 2:
+            image_data = np.ascontiguousarray(image_data)
             bytes_per_line = width
             qimage = QImage(
-                image_data.data,
+                bytes(image_data.data),
                 width,
                 height,
                 bytes_per_line,
@@ -275,18 +276,29 @@ class AssignmentDialog(QDialog):
             image_data = np.ascontiguousarray(image_data)
             bytes_per_line = 3 * width
             qimage = QImage(
-                image_data.data,
+                bytes(image_data.data),
                 width,
                 height,
                 bytes_per_line,
                 QImage.Format.Format_RGB888
             )
+        elif image_data.ndim == 3 and image_data.shape[2] == 4:
+            # RGBA image
+            image_data = np.ascontiguousarray(image_data)
+            bytes_per_line = 4 * width
+            qimage = QImage(
+                bytes(image_data.data),
+                width,
+                height,
+                bytes_per_line,
+                QImage.Format.Format_RGBA8888
+            )
         else:
             # Default to grayscale from first channel
-            image_data = image_data[:, :, 0] if image_data.ndim == 3 else image_data
+            image_data = np.ascontiguousarray(image_data[:, :, 0] if image_data.ndim == 3 else image_data)
             bytes_per_line = width
             qimage = QImage(
-                image_data.data,
+                bytes(image_data.data),
                 width,
                 height,
                 bytes_per_line,
