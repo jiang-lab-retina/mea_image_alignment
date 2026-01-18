@@ -1031,8 +1031,8 @@ def visualize_cells_and_alignment(images: Dict[str, np.ndarray],
 def main():
     parser = argparse.ArgumentParser(description="Cellpose-based Image Alignment")
     parser.add_argument('--input-dir', required=True, help="Directory containing images")
-    parser.add_argument('--prefix', required=True, help="File prefix")
-    parser.add_argument('--output-dir', default='cellpose/output', help="Output directory")
+    parser.add_argument('--prefix', required=True, help="File prefix (e.g., 2025.10.22-10.34.56-4134-opnT2_)")
+    parser.add_argument('--output-dir', default='cellpose/output', help="Base output directory")
     parser.add_argument('--overlap', type=float, default=70, help="Expected overlap %%")
     parser.add_argument('--model', default='cyto3', 
                         choices=['cyto3', 'cyto2', 'cyto', 'nuclei'],
@@ -1059,6 +1059,13 @@ def main():
                         help="Use GPU/MPS acceleration (Apple Silicon uses MPS)")
     
     args = parser.parse_args()
+    
+    # Create output subdirectory based on prefix (file date/time)
+    # Extract folder name from prefix (remove trailing underscore if present)
+    prefix_folder = args.prefix.rstrip('_')
+    output_dir = Path(args.output_dir) / prefix_folder
+    output_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Output directory: {output_dir}")
     
     # Load images
     logger.info(f"Loading images from {args.input_dir}")
@@ -1169,8 +1176,7 @@ def main():
     if len(chip_images) == 4:
         logger.info("Found all 4 chip images")
     
-    # Save outputs
-    output_dir = Path(args.output_dir)
+    # Save outputs (output_dir already set above)
     
     # Visualization
     viz_path = output_dir / "cellpose_alignment.png"
