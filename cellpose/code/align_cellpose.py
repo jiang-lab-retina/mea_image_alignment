@@ -768,20 +768,41 @@ def align_se_via_chain(all_cells: Dict[str, List[CellInfo]],
 
 
 def stitch_images(images: Dict[str, np.ndarray],
-                  result: AlignmentResult) -> np.ndarray:
-    """Stitch images using alignment result with rotation and zoom."""
+                  result: AlignmentResult,
+                  reference_shape: Tuple[int, int] = None) -> np.ndarray:
+    """
+    Stitch images using alignment result with rotation and zoom.
+    
+    Args:
+        images: Dictionary of quadrant images
+        result: Alignment result with dx, dy offsets
+        reference_shape: (height, width) of original images used for alignment.
+                        If provided and different from current images, offsets are scaled.
+    """
     h, w = images['NW'].shape[:2]
     
+    # Scale offsets if reference_shape differs from current image size
+    if reference_shape is not None:
+        ref_h, ref_w = reference_shape
+        scale_x = w / ref_w
+        scale_y = h / ref_h
+    else:
+        scale_x = scale_y = 1.0
+    
+    # Build positions with scaled offsets
     positions = {'NW': (0, 0)}
     for q in ['NE', 'SW', 'SE']:
         if q in result.quadrants:
             qa = result.quadrants[q]
-            positions[q] = (qa.dx, qa.dy)
+            positions[q] = (qa.dx * scale_x, qa.dy * scale_y)
     
-    min_x = min(pos[0] for pos in positions.values())
-    max_x = max(pos[0] + w for pos in positions.values())
-    min_y = min(pos[1] for pos in positions.values())
-    max_y = max(pos[1] + h for pos in positions.values())
+    # Calculate canvas size using actual image dimensions per quadrant
+    all_dims = {q: images[q].shape[:2] for q in images}
+    
+    min_x = min(positions[q][0] for q in positions)
+    max_x = max(positions[q][0] + all_dims.get(q, (h, w))[1] for q in positions if q in all_dims)
+    min_y = min(positions[q][1] for q in positions)
+    max_y = max(positions[q][1] + all_dims.get(q, (h, w))[0] for q in positions if q in all_dims)
     
     canvas_w = int(max_x - min_x) + 10
     canvas_h = int(max_y - min_y) + 10
@@ -812,15 +833,16 @@ def stitch_images(images: Dict[str, np.ndarray],
         x = int(dx + ox)
         y = int(dy + oy)
         
+        # Use actual image dimensions (img_w, img_h) for boundary calculations
         src_x0 = max(0, -x)
         src_y0 = max(0, -y)
-        src_x1 = min(w, canvas_w - x)
-        src_y1 = min(h, canvas_h - y)
+        src_x1 = min(img_w, canvas_w - x)
+        src_y1 = min(img_h, canvas_h - y)
         
         dst_x0 = max(0, x)
         dst_y0 = max(0, y)
-        dst_x1 = min(canvas_w, x + w)
-        dst_y1 = min(canvas_h, y + h)
+        dst_x1 = min(canvas_w, x + img_w)
+        dst_y1 = min(canvas_h, y + img_h)
         
         if dst_x1 > dst_x0 and dst_y1 > dst_y0:
             canvas[dst_y0:dst_y1, dst_x0:dst_x1] += img[src_y0:src_y1, src_x0:src_x1]
@@ -834,7 +856,8 @@ def stitch_images(images: Dict[str, np.ndarray],
 
 def stitch_images_overlay(images: Dict[str, np.ndarray],
                           result: AlignmentResult,
-                          order: List[str] = None) -> np.ndarray:
+                          order: List[str] = None,
+                          reference_shape: Tuple[int, int] = None) -> np.ndarray:
     """
     Stitch images by overlaying (not averaging).
     Later images in the order list are placed on top.
@@ -844,22 +867,36 @@ def stitch_images_overlay(images: Dict[str, np.ndarray],
         result: Alignment result
         order: Order to place images (first = bottom, last = top)
                Default: ['SE', 'SW', 'NE', 'NW'] (NW on top)
+        reference_shape: (height, width) of original images used for alignment.
+                        If provided and different from current images, offsets are scaled.
     """
     if order is None:
         order = ['SE', 'SW', 'NE', 'NW']  # NW ends up on top
     
     h, w = images['NW'].shape[:2]
     
+    # Scale offsets if reference_shape differs from current image size
+    if reference_shape is not None:
+        ref_h, ref_w = reference_shape
+        scale_x = w / ref_w
+        scale_y = h / ref_h
+    else:
+        scale_x = scale_y = 1.0
+    
+    # Build positions with scaled offsets
     positions = {'NW': (0, 0)}
     for q in ['NE', 'SW', 'SE']:
         if q in result.quadrants:
             qa = result.quadrants[q]
-            positions[q] = (qa.dx, qa.dy)
+            positions[q] = (qa.dx * scale_x, qa.dy * scale_y)
     
-    min_x = min(pos[0] for pos in positions.values())
-    max_x = max(pos[0] + w for pos in positions.values())
-    min_y = min(pos[1] for pos in positions.values())
-    max_y = max(pos[1] + h for pos in positions.values())
+    # Calculate canvas size using actual image dimensions per quadrant
+    all_dims = {q: images[q].shape[:2] for q in images}
+    
+    min_x = min(positions[q][0] for q in positions)
+    max_x = max(positions[q][0] + all_dims.get(q, (h, w))[1] for q in positions if q in all_dims)
+    min_y = min(positions[q][1] for q in positions)
+    max_y = max(positions[q][1] + all_dims.get(q, (h, w))[0] for q in positions if q in all_dims)
     
     canvas_w = int(max_x - min_x) + 10
     canvas_h = int(max_y - min_y) + 10
@@ -889,15 +926,16 @@ def stitch_images_overlay(images: Dict[str, np.ndarray],
         x = int(dx + ox)
         y = int(dy + oy)
         
+        # Use actual image dimensions (img_w, img_h) for boundary calculations
         src_x0 = max(0, -x)
         src_y0 = max(0, -y)
-        src_x1 = min(w, canvas_w - x)
-        src_y1 = min(h, canvas_h - y)
+        src_x1 = min(img_w, canvas_w - x)
+        src_y1 = min(img_h, canvas_h - y)
         
         dst_x0 = max(0, x)
         dst_y0 = max(0, y)
-        dst_x1 = min(canvas_w, x + w)
-        dst_y1 = min(canvas_h, y + h)
+        dst_x1 = min(canvas_w, x + img_w)
+        dst_y1 = min(canvas_h, y + img_h)
         
         if dst_x1 > dst_x0 and dst_y1 > dst_y0:
             # Overwrite (not add) - later images cover earlier ones
@@ -951,9 +989,10 @@ def visualize_cells_and_alignment(images: Dict[str, np.ndarray],
     axes[1, 0].set_title(f'Original Stitched\nConsistency: {result.consistency_error:.1f}px', fontsize=10)
     axes[1, 0].axis('off')
     
-    # Chip stitched
+    # Chip stitched - pass original image shape for proper scaling
+    original_shape = images['NW'].shape[:2]
     if len(chip_images) == 4:
-        chip_stitched = stitch_images(chip_images, result)
+        chip_stitched = stitch_images(chip_images, result, reference_shape=original_shape)
         axes[1, 1].imshow(chip_stitched, cmap='gray')
         axes[1, 1].set_title('Chip Stitched', fontsize=10)
     else:
@@ -1217,14 +1256,14 @@ def main():
         pass
     
     if len(chip_images) == 4:
-        # Chip stitched (mean projection)
-        chip_stitched = stitch_images(chip_images, result)
+        # Chip stitched (mean projection) - pass original image shape for scaling
+        chip_stitched = stitch_images(chip_images, result, reference_shape=image_shape)
         chip_path = output_dir / "cellpose_chip_stitched.png"
         cv2.imwrite(str(chip_path), np.clip(chip_stitched, 0, 255).astype(np.uint8))
         logger.info(f"Saved chip stitched (mean) to {chip_path}")
         
-        # Chip stitched (overlay)
-        chip_overlay = stitch_images_overlay(chip_images, result, order=['SE', 'SW', 'NE', 'NW'])
+        # Chip stitched (overlay) - pass original image shape for scaling
+        chip_overlay = stitch_images_overlay(chip_images, result, order=['SE', 'SW', 'NE', 'NW'], reference_shape=image_shape)
         chip_overlay_path = output_dir / "cellpose_chip_overlay.png"
         cv2.imwrite(str(chip_overlay_path), np.clip(chip_overlay, 0, 255).astype(np.uint8))
         logger.info(f"Saved chip stitched (overlay) to {chip_overlay_path}")

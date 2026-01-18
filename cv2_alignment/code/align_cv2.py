@@ -542,22 +542,41 @@ def align_se_via_chain(images: Dict[str, np.ndarray],
 
 
 def stitch_images(images: Dict[str, np.ndarray],
-                  result: AlignmentResult) -> np.ndarray:
-    """Stitch images using alignment result."""
+                  result: AlignmentResult,
+                  reference_shape: Tuple[int, int] = None) -> np.ndarray:
+    """
+    Stitch images using alignment result.
+    
+    Args:
+        images: Dictionary of quadrant images
+        result: Alignment result with dx, dy offsets
+        reference_shape: (height, width) of original images used for alignment.
+                        If provided and different from current images, offsets are scaled.
+    """
     h, w = images['NW'].shape[:2]
     
-    # Get positions
+    # Scale offsets if reference_shape differs from current image size
+    if reference_shape is not None:
+        ref_h, ref_w = reference_shape
+        scale_x = w / ref_w
+        scale_y = h / ref_h
+    else:
+        scale_x = scale_y = 1.0
+    
+    # Get positions with scaled offsets
     positions = {'NW': (0, 0)}
     for q in ['NE', 'SW', 'SE']:
         if q in result.quadrants:
             qa = result.quadrants[q]
-            positions[q] = (qa.dx, qa.dy)
+            positions[q] = (qa.dx * scale_x, qa.dy * scale_y)
     
-    # Calculate canvas size
-    min_x = min(pos[0] for pos in positions.values())
-    max_x = max(pos[0] + w for pos in positions.values())
-    min_y = min(pos[1] for pos in positions.values())
-    max_y = max(pos[1] + h for pos in positions.values())
+    # Calculate canvas size using actual image dimensions per quadrant
+    all_dims = {q: images[q].shape[:2] for q in images}
+    
+    min_x = min(positions[q][0] for q in positions)
+    max_x = max(positions[q][0] + all_dims.get(q, (h, w))[1] for q in positions if q in all_dims)
+    min_y = min(positions[q][1] for q in positions)
+    max_y = max(positions[q][1] + all_dims.get(q, (h, w))[0] for q in positions if q in all_dims)
     
     canvas_w = int(max_x - min_x) + 10
     canvas_h = int(max_y - min_y) + 10
@@ -571,30 +590,31 @@ def stitch_images(images: Dict[str, np.ndarray],
             continue
         
         img = images[q].astype(np.float64)
+        img_h, img_w = img.shape[:2]
         
         # Apply rotation and zoom if present
         if q in result.quadrants:
             qa = result.quadrants[q]
             if abs(qa.rotation_deg) > 0.001 or abs(qa.zoom - 1.0) > 0.001:
-                center = (w / 2, h / 2)
+                center = (img_w / 2, img_h / 2)
                 M = cv2.getRotationMatrix2D(center, qa.rotation_deg, qa.zoom)
-                img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR,
+                img = cv2.warpAffine(img, M, (img_w, img_h), flags=cv2.INTER_LINEAR,
                                       borderMode=cv2.BORDER_REFLECT)
         
         dx, dy = positions.get(q, (0, 0))
         x = int(dx + ox)
         y = int(dy + oy)
         
-        # Clip to canvas bounds
+        # Use actual image dimensions for boundary calculations
         src_x0 = max(0, -x)
         src_y0 = max(0, -y)
-        src_x1 = min(w, canvas_w - x)
-        src_y1 = min(h, canvas_h - y)
+        src_x1 = min(img_w, canvas_w - x)
+        src_y1 = min(img_h, canvas_h - y)
         
         dst_x0 = max(0, x)
         dst_y0 = max(0, y)
-        dst_x1 = min(canvas_w, x + w)
-        dst_y1 = min(canvas_h, y + h)
+        dst_x1 = min(canvas_w, x + img_w)
+        dst_y1 = min(canvas_h, y + img_h)
         
         if dst_x1 > dst_x0 and dst_y1 > dst_y0:
             canvas[dst_y0:dst_y1, dst_x0:dst_x1] += img[src_y0:src_y1, src_x0:src_x1]
@@ -640,9 +660,10 @@ def visualize_results(images: Dict[str, np.ndarray],
     axes[0, 2].set_title(f'Original Stitched\nConsistency: {result.consistency_error:.2f}px', fontsize=11)
     axes[0, 2].axis('off')
     
-    # Stitched chip
+    # Stitched chip - pass original image shape for proper scaling
+    original_shape = images['NW'].shape[:2]
     if len(chip_images) == 4:
-        chip_stitched = stitch_images(chip_images, result)
+        chip_stitched = stitch_images(chip_images, result, reference_shape=original_shape)
         axes[1, 2].imshow(chip_stitched, cmap='gray')
         axes[1, 2].set_title('Chip Stitched\n(using same alignment)', fontsize=11)
     else:
@@ -766,7 +787,9 @@ def main():
     logger.info(f"Saved original stitched to {stitched_path}")
     
     if len(chip_images) == 4:
-        chip_stitched = stitch_images(chip_images, result)
+        # Pass original image shape for proper offset scaling
+        original_shape = images['NW'].shape[:2]
+        chip_stitched = stitch_images(chip_images, result, reference_shape=original_shape)
         chip_path = output_dir / "cv2_chip_stitched.png"
         cv2.imwrite(str(chip_path), np.clip(chip_stitched, 0, 255).astype(np.uint8))
         logger.info(f"Saved chip stitched to {chip_path}")
